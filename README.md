@@ -2,16 +2,6 @@
 
 App Android nativo de notícias com identidade vermelho e preto, inspirado nas referências visuais enviadas pelo usuário.
 
-Repositório: [Bodani16/Gnix](https://github.com/Bodani16/Gnix).
-
-O [Plano Mestre](PLANO_MESTRE.md) reúne a visão do produto, a estratégia de evolução e a organização do trabalho com IA. Os registros de verificação ficam em [docs/verification.md](docs/verification.md).
-
-## Estado desta entrega
-
-**Código-fonte preparado; APK ainda não compilado.** A máquina de desenvolvimento tem Java 21, mas não possui SDK Android ou Gradle. Downloads falharam com conexão recusada ao proxy do sandbox; as solicitações de permissão de rede foram interrompidas. Não foi feita compilação de Kotlin, lint Android ou execução em emulador. Não há arquivo APK neste pacote e não se afirma que a compilação Android passou.
-
-Foram executadas as verificações Java do leitor RSS/Atom e da combinação de notícias com cache. O cliente HTTP Java também foi compilado localmente. Veja `docs/verification.md` para o resultado atualizado. O código foi adaptado ao Android 16 (API 36), mas isso ainda não foi validado em aparelhos Samsung, Motorola ou Pixel.
-
 ## Funcionalidades no código
 
 - Apresentação Gnix, seleção de assuntos em grade e escolha de fontes com interruptores.
