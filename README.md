@@ -32,7 +32,7 @@ G1, Agência Brasil, BBC News Brasil, Tecnoblog, Canaltech e feeds temáticos do
 
 Requisitos: JDK 17+, Python 3, curl, unzip e acesso à Internet.
 
-O aplicativo não exige credenciais nem variáveis de um arquivo `.env`. O arquivo `.env` incluído no repositório documenta essa configuração e não é carregado pelos scripts de build. Para indicar um SDK Android já instalado, defina `ANDROID_HOME` no ambiente do terminal.
+O aplicativo não exige credenciais nem arquivo `.env`. Para indicar um SDK Android já instalado, defina `ANDROID_HOME` no ambiente do terminal. Mantenha arquivos `.env` locais fora do controle de versão.
 
 ```bash
 bash build-apk.sh
