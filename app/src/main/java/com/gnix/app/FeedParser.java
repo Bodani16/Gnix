@@ -22,8 +22,12 @@ public final class FeedParser {
         DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
         factory.setNamespaceAware(true);
         factory.setExpandEntityReferences(false);
+        try { factory.setFeature(javax.xml.XMLConstants.FEATURE_SECURE_PROCESSING, true); } catch (Exception ignored) { }
+        try { factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true); } catch (Exception ignored) { }
         try { factory.setFeature("http://xml.org/sax/features/external-general-entities", false); } catch (Exception ignored) { }
         try { factory.setFeature("http://xml.org/sax/features/external-parameter-entities", false); } catch (Exception ignored) { }
+        try { factory.setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false); } catch (Exception ignored) { }
+        try { factory.setXIncludeAware(false); } catch (Exception ignored) { }
         var builder = factory.newDocumentBuilder();
         builder.setEntityResolver((publicId, systemId) -> { throw new SAXException("Entidade externa bloqueada"); });
         builder.setErrorHandler(new DefaultHandler() {
