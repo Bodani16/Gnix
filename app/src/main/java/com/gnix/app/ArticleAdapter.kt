@@ -53,6 +53,18 @@ class ArticleAdapter(
         card.addView(actions); ui.add(outer, card)
         return Holder(outer, metadata, sourceIcon, headline, summary, read, bookmark).also { outer.tag = it }
     }
+    private fun bindIcon(container: FrameLayout, kind: String, color: Int, size: Int, gravity: Int = Gravity.CENTER) {
+        val existing = container.tag as? GnixIcon
+        if (existing == null) {
+            val icon = GnixIcon(context, kind, color)
+            container.tag = icon
+            container.addView(icon, FrameLayout.LayoutParams(size, size, gravity))
+            return
+        }
+        existing.iconKind = kind
+        existing.iconColor = color
+        existing.invalidate()
+    }
     override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
         val holder = (convertView?.tag as? Holder) ?: create()
         val article = articles[position]
@@ -62,8 +74,7 @@ class ArticleAdapter(
             "Mundo" -> "world"; "Economia" -> "economy"; "Tecnologia" -> "tech"
             "Esportes" -> "sports"; "Saúde" -> "health"; else -> "news"
         }
-        holder.sourceIcon.removeAllViews()
-        holder.sourceIcon.addView(GnixIcon(context, kind, GnixViews.muted), FrameLayout.LayoutParams(-1, -1))
+        bindIcon(holder.sourceIcon, kind, GnixViews.muted, -1)
         holder.headline.text = article.title
         holder.headline.setOnClickListener { open(article) }
         holder.summary.text = article.summary
@@ -73,8 +84,7 @@ class ArticleAdapter(
         holder.read.setOnClickListener { open(article) }
         val bookmarked = isSaved(article.url)
         holder.bookmark.contentDescription = if (bookmarked) "Remover dos salvos: ${article.title}" else "Salvar notícia: ${article.title}"
-        holder.bookmark.removeAllViews()
-        holder.bookmark.addView(GnixIcon(context, "bookmark", if (bookmarked) GnixViews.red else GnixViews.foreground), FrameLayout.LayoutParams(ui.dp(23), ui.dp(23), Gravity.CENTER))
+        bindIcon(holder.bookmark, "bookmark", if (bookmarked) GnixViews.red else GnixViews.foreground, ui.dp(23))
         ui.clickable(holder.bookmark, 16, if (bookmarked) GnixViews.raised else GnixViews.surface) { toggleSaved(article) }
         return holder.outer
     }

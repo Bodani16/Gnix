@@ -30,6 +30,13 @@ public final class CoreChecks {
         boolean entities = false;
         try { FeedParser.parse("<!DOCTYPE rss [<!ENTITY x SYSTEM 'file:///etc/passwd'>]><rss><channel/></rss>", src); } catch (Exception e) { entities = true; }
         check(entities, "DOCTYPE should be rejected");
+        boolean lowerEntity = false;
+        try { FeedParser.parse("<!doctype rss [<!entity x 'y'>]><rss><channel/></rss>", src); } catch (Exception e) { lowerEntity = true; }
+        check(lowerEntity, "Lowercase DOCTYPE should be rejected");
+        String home = "<html><head><link href='/noticias.xml?x=1&amp;y=2' type='application/rss+xml' rel='alternate' title='Notícias'></head></html>";
+        check(FeedParser.discoverFeedUrl(home, "https://example.com/").equals("https://example.com/noticias.xml?x=1&y=2"), "Site should reveal its RSS feed");
+        check(FeedParser.discoverFeedUrl("<link rel=\"alternate\" type=\"application/atom+xml\" href=\"https://example.com/atom\">", "https://example.com/").equals("https://example.com/atom"), "Atom discovery should work");
+        check(FeedParser.discoverFeedUrl("<link rel='alternate' type='application/rss+xml' href='http://example.com/rss'>", "https://example.com/").isEmpty(), "Discovery must require HTTPS");
         List<Article> combined = FeedParser.normalizeArticles(Arrays.asList(noDate, articles.get(0), a, articles.get(0)));
         check(combined.size() == 3, "Duplicate URL should appear once");
         check(combined.get(0).url.equals(a.url), "Newest should sort first");
@@ -40,7 +47,7 @@ public final class CoreChecks {
         Article fresh = new Article("Nova", "Feed", "https://example.com/new", "good", 2);
         NewsRepository repo = new NewsRepository(source -> {
             if (source.id.equals("bad")) throw new java.io.IOException("offline");
-            return Collections.singletonList(fresh);
+            return NewsRepository.LoadResult.of(Collections.singletonList(fresh));
         });
         NewsRepository.RefreshResult partial = repo.refresh(Arrays.asList(good, bad), Collections.singletonList(old));
         check(partial.articles.size() == 2, "Partial failure should preserve cache from failed source");
@@ -49,8 +56,13 @@ public final class CoreChecks {
         NewsRepository.RefreshResult offline = repo.refresh(Collections.singletonList(bad), Collections.singletonList(old));
         check(offline.articles.get(0).url.equals(old.url), "Offline should preserve prior edition");
         check(repo.refresh(Collections.emptyList(), Collections.singletonList(old)).articles.isEmpty(), "Empty selection should not restore default sources");
-        NewsRepository emptyRepo = new NewsRepository(source -> Collections.emptyList());
+        NewsRepository emptyRepo = new NewsRepository(source -> NewsRepository.LoadResult.of(Collections.emptyList()));
         check(emptyRepo.refresh(Collections.singletonList(bad), Collections.singletonList(old)).articles.isEmpty(), "Successful empty feed should replace stale cache");
+        NewsRepository notModifiedRepo = new NewsRepository(source -> new NewsRepository.LoadResult(Collections.emptyList(), true, "etag-1", "Mon, 01 Jan 2026 00:00:00 GMT"));
+        Article cachedGood = new Article("Cacheada", "Antiga", "https://example.com/old-good", "good", 5);
+        NewsRepository.RefreshResult notModified = notModifiedRepo.refresh(Collections.singletonList(good), Collections.singletonList(cachedGood));
+        check(notModified.failedSourceIds.isEmpty(), "304 should not mark source as failed");
+        check(notModified.articles.size() == 1 && notModified.articles.get(0).url.equals(cachedGood.url), "304 should keep cache articles");
         Source general = new Source("general", "Geral", "https://example.com/general", "Geral");
         Source tech = new Source("tech", "Tech", "https://example.com/tech", "Tecnologia");
         List<Source> catalog = Arrays.asList(general, tech);
@@ -69,8 +81,15 @@ public final class CoreChecks {
         check(DisplayPolicy.needsRefresh(1000000, 1, false), "Stale cache should refresh");
         check(DisplayPolicy.needsRefresh(100000, 99000, true), "Empty cache should refresh even when recent");
         check(DisplayPolicy.needsRefresh(100000, 0, false), "Unknown refresh date should refresh");
-        check(DisplayPolicy.refreshTimestamp(100000, false) == 0, "Partial failure must invalidate freshness");
-        check(DisplayPolicy.refreshTimestamp(100000, true) == 100000, "Full success should record freshness");
+        check(DisplayPolicy.refreshTimestamp(100000, 0, 2) == 0, "Total failure must invalidate freshness");
+        check(DisplayPolicy.refreshTimestamp(100000, 2, 2) == 100000, "Full success should record freshness");
+        long now = 1_000_000_000_000L;
+        long partialStamp = DisplayPolicy.refreshTimestamp(now, 1, 2);
+        check(partialStamp == now - 480_000L, "Partial failure should backdate freshness");
+        check(!DisplayPolicy.needsRefresh(now, partialStamp, false), "Partial failure should not force immediate refresh");
+        check(DisplayPolicy.needsRefresh(now + 300_000, partialStamp, false), "Partial failure should refresh after TTL gap");
+        check(DisplayPolicy.refreshTimestamp(100000, false) == 0, "Legacy boolean partial failure still invalidates freshness");
+        check(DisplayPolicy.refreshTimestamp(100000, true) == 100000, "Legacy boolean full success still records freshness");
         System.out.println("PASS: " + checks + " core checks");
     }
     public static void main(String[] args) throws Exception { run(); }

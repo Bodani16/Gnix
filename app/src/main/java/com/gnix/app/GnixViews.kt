@@ -19,13 +19,16 @@ class GnixViews(private val context: Context) {
         val muted = Color.rgb(184, 184, 194)
         val red = Color.rgb(229, 57, 53)
         val border = Color.rgb(52, 52, 59)
+        private val typefaceRegular = Typeface.create("sans-serif", Typeface.NORMAL)
+        private val typefaceMedium = Typeface.create("sans-serif-medium", Typeface.BOLD)
+        private val typefaceBlack = Typeface.create("sans-serif-black", Typeface.BOLD)
     }
     fun dp(value: Int) = (value * context.resources.displayMetrics.density).toInt()
     fun column() = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
     fun row() = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
     fun text(value: String, size: Float = 16f, color: Int = foreground, bold: Boolean = false) = TextView(context).apply {
         text = value; textSize = size; setTextColor(color)
-        typeface = Typeface.create(if (bold) "sans-serif-medium" else "sans-serif", if (bold) Typeface.BOLD else Typeface.NORMAL)
+        typeface = if (bold) typefaceMedium else typefaceRegular
         includeFontPadding = false
         setLineSpacing(dp(3).toFloat(), 1f)
     }
@@ -73,16 +76,19 @@ class GnixViews(private val context: Context) {
         trackTintList = ColorStateList(arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()), intArrayOf(red, border))
         minWidth = dp(56); minHeight = dp(48)
     }
+    fun typefaceBlack() = typefaceBlack
 }
 
 /** Original line icons, drawn locally without external assets. */
-class GnixIcon(context: Context, private val kind: String, private val color: Int) : View(context) {
+class GnixIcon(context: Context, kind: String, color: Int) : View(context) {
+    var iconKind: String = kind
+    var iconColor: Int = color
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = 1.7f; strokeCap = Paint.Cap.ROUND; strokeJoin = Paint.Join.ROUND }
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
-        canvas.save(); canvas.scale(width / 24f, height / 24f); paint.color = color
+        canvas.save(); canvas.scale(width / 24f, height / 24f); paint.color = iconColor
         fun line(x: Float, y: Float, x2: Float, y2: Float) = canvas.drawLine(x, y, x2, y2, paint)
-        when (kind) {
+        when (iconKind) {
             "bookmark" -> { val p = Path(); p.moveTo(6f, 3f); p.lineTo(18f, 3f); p.lineTo(18f, 21f); p.lineTo(12f, 17f); p.lineTo(6f, 21f); p.close(); canvas.drawPath(p, paint) }
             "search" -> { canvas.drawCircle(10f, 10f, 6f, paint); line(15f, 15f, 21f, 21f) }
             "back" -> { line(20f, 12f, 4f, 12f); line(4f, 12f, 10f, 6f); line(4f, 12f, 10f, 18f) }
@@ -93,6 +99,10 @@ class GnixIcon(context: Context, private val kind: String, private val color: In
             "economy" -> { line(4f, 3f, 4f, 21f); line(4f, 21f, 21f, 21f); line(7f, 16f, 12f, 10f); line(12f, 10f, 16f, 13f); line(16f, 13f, 21f, 5f) }
             "health" -> { canvas.drawRoundRect(RectF(3f, 3f, 21f, 21f), 5f, 5f, paint); line(12f, 7f, 12f, 17f); line(7f, 12f, 17f, 12f) }
             "sports" -> { canvas.drawCircle(12f, 12f, 9f, paint); val p = Path(); p.moveTo(12f, 7f); p.lineTo(17f, 10f); p.lineTo(15f, 16f); p.lineTo(9f, 16f); p.lineTo(7f, 10f); p.close(); canvas.drawPath(p, paint) }
+            "politics" -> { line(3f, 9f, 12f, 4f); line(12f, 4f, 21f, 9f); line(3f, 9f, 21f, 9f); for (x in listOf(6f, 12f, 18f)) line(x, 11f, x, 18f); line(3f, 20f, 21f, 20f) }
+            "games" -> { canvas.drawRoundRect(RectF(3f, 7f, 21f, 18f), 4f, 4f, paint); line(7f, 12f, 12f, 12f); line(9.5f, 9.5f, 9.5f, 14.5f); canvas.drawCircle(16f, 11f, .8f, paint); canvas.drawCircle(18f, 14f, .8f, paint) }
+            "video" -> { canvas.drawRoundRect(RectF(3f, 5f, 21f, 19f), 3f, 3f, paint); val p = Path(); p.moveTo(10f, 9f); p.lineTo(16f, 12f); p.lineTo(10f, 15f); p.close(); canvas.drawPath(p, paint) }
+            "culture" -> { line(14f, 5f, 19f, 4f); line(14f, 5f, 14f, 17f); line(19f, 4f, 19f, 15f); canvas.drawOval(RectF(8f, 16f, 14f, 20f), paint); canvas.drawOval(RectF(13f, 14f, 19f, 18f), paint) }
             "check" -> { line(4f, 12f, 9f, 17f); line(9f, 17f, 20f, 6f) }
             "arrow" -> { line(4f, 12f, 20f, 12f); line(14f, 6f, 20f, 12f); line(20f, 12f, 14f, 18f) }
             "plus" -> { line(12f, 4f, 12f, 20f); line(4f, 12f, 20f, 12f) }

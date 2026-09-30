@@ -5,6 +5,8 @@ import android.app.AlertDialog
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.graphics.Typeface
 import android.view.Gravity
 import android.view.View
@@ -30,12 +32,17 @@ class MainActivity : Activity() {
     private var feedList: ListView? = null
     private var feedAdapter: ArticleAdapter? = null
     private val worker = Executors.newSingleThreadExecutor()
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private var searchRunnable: Runnable? = null
+    private val editionDateFormat = SimpleDateFormat("EEEE, d 'de' MMMM", Locale("pt", "BR"))
     private var sources = SourceCatalog.initial.toMutableList()
     private var custom = mutableListOf<Source>()
     private var selected = mutableSetOf<String>()
     private var topics = mutableSetOf<String>()
     private var articles = listOf<Article>()
     private var saved = listOf<Article>()
+    private var sourceById: Map<String, Source> = emptyMap()
+    private var savedUrls: Set<String> = emptySet()
     private var page = Page.WELCOME
     private var configured = false
     private var loading = false
@@ -54,6 +61,7 @@ class MainActivity : Activity() {
         custom = store.loadCustomSources().toMutableList(); sources.addAll(custom)
         selected = store.loadSelection().toMutableSet(); topics = store.loadTopics().toMutableSet()
         articles = store.loadCache(); saved = store.loadSaved(); configured = store.isConfigured()
+        rebuildIndexes()
         if (configured) page = Page.FEED
         state?.getString("page")?.let { runCatching { page = Page.valueOf(it) } }
         state?.getStringArrayList("draftSelection")?.let { selected = it.toMutableSet() }
@@ -81,9 +89,25 @@ class MainActivity : Activity() {
         out.putStringArrayList("draftTopics", ArrayList(topics))
         super.onSaveInstanceState(out)
     }
-    override fun onDestroy() { destroyed = true; worker.shutdownNow(); super.onDestroy() }
+    override fun onDestroy() {
+        destroyed = true
+        searchRunnable?.let { mainHandler.removeCallbacks(it) }
+        mainHandler.removeCallbacksAndMessages(null)
+        worker.shutdownNow()
+        super.onDestroy()
+    }
+    // Lint pede a migração para o OnBackPressedDispatcher do AndroidX, que este
+    // projeto não usa por restrição de escopo. A API 33+ já é atendida pelo
+    // OnBackInvokedDispatcher nativo registrado em onCreate; este override é o
+    // único caminho de "voltar" nas APIs 27 a 32, onde predictive back não existe.
+    // O próprio check avisa que não considera opt-in por Activity.
+    @Suppress("GestureBackNavigation")
     @Deprecated("Compatible back handling for Android 8.1+")
     override fun onBackPressed() { handleBack() }
+    private fun rebuildIndexes() {
+        sourceById = sources.associateBy { it.id }
+        savedUrls = saved.mapTo(HashSet(saved.size)) { it.url }
+    }
     private fun handleBack() {
         when (page) {
             Page.TOPICS -> {
@@ -105,7 +129,7 @@ class MainActivity : Activity() {
     }
     private fun toast(message: String) = Toast.makeText(this, message, Toast.LENGTH_LONG).show()
     private fun persist(action: () -> Unit): Boolean = try { action(); true } catch (_: Exception) { toast("Não foi possível salvar. Tente novamente."); false }
-    private fun iconFor(category: String) = when (category) { "Mundo" -> "world"; "Economia" -> "economy"; "Tecnologia" -> "tech"; "Esportes" -> "sports"; "Saúde" -> "health"; else -> "news" }
+    private fun iconFor(category: String) = when (category) { "Mundo" -> "world"; "Política" -> "politics"; "Economia" -> "economy"; "Tecnologia" -> "tech"; "Jogos" -> "games"; "Esportes" -> "sports"; "Saúde" -> "health"; "Vídeos" -> "video"; "Cultura" -> "culture"; else -> "news" }
     private fun title(text: String, subtitle: String) {
         ui.add(content, ui.text(text, 29f, bold = true), 10)
         ui.add(content, ui.text(subtitle, 15f, GnixViews.muted), 26)
@@ -240,7 +264,7 @@ class MainActivity : Activity() {
                 val row = ui.row().apply { minimumHeight = ui.dp(72) }
                 val labels = ui.column()
                 ui.add(labels, ui.text(source.name, 16f, bold = true), 5)
-                ui.add(labels, ui.text(Uri.parse(source.url).host ?: "Fonte personalizada", 11f, GnixViews.muted))
+                ui.add(labels, ui.text(hostOf(source.url), 11f, GnixViews.muted))
                 row.addView(labels, LinearLayout.LayoutParams(0, -2, 1f))
                 val toggle = ui.switch(source.id in selected).apply { contentDescription = "Selecionar ${source.name}" }
                 toggle.setOnCheckedChangeListener { _, checked ->
@@ -264,6 +288,9 @@ class MainActivity : Activity() {
         }
         ui.add(footer, sourceContinue!!)
     }
+    private fun hostOf(url: String): String = try {
+        Uri.parse(url).host ?: "Fonte personalizada"
+    } catch (_: Exception) { "Fonte personalizada" }
     private fun addSource() {
         val fields = ui.column().apply { setPadding(ui.dp(24), ui.dp(12), ui.dp(24), 0) }
         fun field(hint: String, type: Int): EditText = EditText(this).apply {
@@ -271,13 +298,13 @@ class MainActivity : Activity() {
             minHeight = ui.dp(56); isSingleLine = true
         }
         val name = field("Nome da fonte", InputType.TYPE_CLASS_TEXT)
-        val url = field("https://site.com/feed", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI)
+        val url = field("https://site.com ou endereço do feed", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI)
         fields.addView(name); fields.addView(url)
         val spinner = Spinner(this)
         val categories = SourceCatalog.categories
         spinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, categories)
         fields.addView(spinner)
-        val dialog = AlertDialog.Builder(this).setTitle("Adicionar fonte RSS").setMessage("Informe o endereço HTTPS do feed da fonte.")
+        val dialog = AlertDialog.Builder(this).setTitle("Adicionar fonte RSS").setMessage("Informe o endereço HTTPS do site ou do feed RSS/Atom.")
             .setView(fields).setNegativeButton("Cancelar", null).setPositiveButton("Adicionar", null).create()
         dialog.setOnShowListener {
             val button = dialog.getButton(AlertDialog.BUTTON_POSITIVE)
@@ -289,14 +316,21 @@ class MainActivity : Activity() {
                 val source = Source("custom-${UUID.randomUUID()}", name.text.toString().trim().take(80), endpoint, categories[spinner.selectedItemPosition])
                 button.isEnabled = false; button.text = "Verificando…"
                 worker.execute {
-                    val result = runCatching { FeedClient().load(source) }
+                    val result = runCatching { FeedClient().verifiedFeedUrl(source) }
                     runOnUiThread {
                         if (destroyed || !dialog.isShowing) return@runOnUiThread
                         button.isEnabled = true; button.text = "Adicionar"
-                        if (result.isFailure) { url.error = "Não foi possível ler RSS/Atom deste endereço"; return@runOnUiThread }
-                        val next = custom + source
+                        if (result.isFailure) {
+                            url.error = result.exceptionOrNull()?.message ?: "Não foi possível ler o feed. Confira o endereço e sua conexão."
+                            return@runOnUiThread
+                        }
+                        val feedUrl = result.getOrThrow()
+                        if (sources.any { it.url == feedUrl }) { url.error = "Esta fonte já foi adicionada"; return@runOnUiThread }
+                        val resolved = Source(source.id, source.name, feedUrl, source.category)
+                        val next = custom + resolved
                         if (persist { store.saveCustomSources(next) }) {
-                            custom = next.toMutableList(); sources.add(source); topics.add(source.category); selected.add(source.id)
+                            custom = next.toMutableList(); sources.add(resolved); topics.add(resolved.category); selected.add(resolved.id)
+                            rebuildIndexes()
                             dialog.dismiss(); render()
                         }
                     }
@@ -314,7 +348,7 @@ class MainActivity : Activity() {
         ui.add(content, top, 18)
         val isSaved = page == Page.SAVED
         ui.add(content, ui.text(if (isSaved) "Sua biblioteca" else "Sua edição", 27f, bold = true), 7)
-        ui.add(content, ui.text(if (isSaved) "Boas leituras, guardadas para depois." else SimpleDateFormat("EEEE, d 'de' MMMM", Locale("pt", "BR")).format(Date()).replaceFirstChar { it.uppercase() }, 13f, GnixViews.muted), 20)
+        ui.add(content, ui.text(if (isSaved) "Boas leituras, guardadas para depois." else editionDateFormat.format(Date()).replaceFirstChar { it.uppercase() }, 13f, GnixViews.muted), 20)
         if (searching) {
             val search = EditText(this).apply {
                 hint = "Buscar título, assunto ou fonte"; setText(query); inputType = InputType.TYPE_CLASS_TEXT
@@ -324,14 +358,22 @@ class MainActivity : Activity() {
             ui.add(content, search, 18)
             search.addTextChangedListener(object : TextWatcher {
                 override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
-                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) { query = s.toString(); drawArticles() }
+                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                    query = s.toString()
+                    searchRunnable?.let { mainHandler.removeCallbacks(it) }
+                    val task = Runnable { if (!destroyed) drawArticles() }
+                    searchRunnable = task
+                    mainHandler.postDelayed(task, 250L)
+                }
                 override fun afterTextChanged(s: Editable?) {}
             })
         }
         val filters = ui.row()
         val items = if (isSaved) saved else articles
-        val cats = items.mapNotNull { article -> sources.find { it.id == article.sourceId }?.category }.distinct()
-        for (cat in listOf("Tudo") + cats) filters.addView(ui.pill(cat, cat == category) { category = cat; render() }, LinearLayout.LayoutParams(-2, -2).apply { rightMargin = ui.dp(8) })
+        val cats = items.mapNotNull { article -> sourceById[article.sourceId]?.category }.distinct()
+        val filterCats = if (cats.size > 1) listOf("Tudo") + cats else listOf("Tudo")
+        if (category !in filterCats) category = "Tudo"
+        for (cat in filterCats) filters.addView(ui.pill(cat, cat == category) { category = cat; render() }, LinearLayout.LayoutParams(-2, -2).apply { rightMargin = ui.dp(8) })
         ui.add(content, HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false; addView(filters) }, 18)
         if (loading) {
             val status = ui.row()
@@ -347,14 +389,15 @@ class MainActivity : Activity() {
         articleContainer = ui.column()
         ui.add(content, articleContainer!!)
         feedAdapter = ArticleAdapter(this, ui,
-            sourceFor = { id -> sources.find { it.id == id } },
-            isSaved = { url -> saved.any { it.url == url } },
+            sourceFor = { id -> sourceById[id] },
+            isSaved = { url -> url in savedUrls },
             open = { openArticle(it) },
             toggleSaved = { article ->
-                val wasSaved = saved.any { it.url == article.url }
+                val wasSaved = article.url in savedUrls
                 val next = if (wasSaved) saved.filterNot { it.url == article.url } else listOf(article) + saved
                 if (persist { store.saveBookmarks(next) }) {
                     saved = next
+                    rebuildIndexes()
                     drawArticles()
                     feedList?.announceForAccessibility(if (wasSaved) "Notícia removida dos salvos" else "Notícia salva")
                 }
@@ -369,9 +412,11 @@ class MainActivity : Activity() {
         list.removeAllViews()
         val isSaved = page == Page.SAVED
         val base = if (isSaved) saved else articles.filter { it.sourceId in selected }
-        val filtered = base.filter { article ->
-            val src = sources.find { it.id == article.sourceId }
-            (category == "Tudo" || src?.category == category) && (query.isBlank() || "${article.title} ${article.summary} ${src?.name.orEmpty()}".contains(query, ignoreCase = true))
+        val needle = query.trim()
+        val filtered = if (needle.isEmpty() && category == "Tudo") base else base.filter { article ->
+            val src = sourceById[article.sourceId]
+            (category == "Tudo" || src?.category == category) &&
+                (needle.isEmpty() || "${article.title} ${article.summary} ${src?.name.orEmpty()}".contains(needle, ignoreCase = true))
         }
         feedAdapter?.submit(filtered)
         list.visibility = if (filtered.isEmpty()) View.VISIBLE else View.GONE
@@ -401,8 +446,8 @@ class MainActivity : Activity() {
         for ((label, icon, destination) in listOf(Triple("Edição", "news", Page.FEED), Triple("Fontes", "settings", Page.SOURCES), Triple("Salvos", "bookmark", Page.SAVED))) {
             val active = page == destination
             val item = ui.column().apply { gravity = Gravity.CENTER; minimumHeight = ui.dp(64); setPadding(0, ui.dp(10), 0, ui.dp(6)) }
-            item.addView(GnixIcon(this, icon, if (active) GnixViews.red else GnixViews.muted), LinearLayout.LayoutParams(ui.dp(22), ui.dp(22)).apply { bottomMargin = ui.dp(6) })
-            item.addView(ui.text(label, 11f, if (active) GnixViews.red else GnixViews.muted, active))
+            item.addView(GnixIcon(this, icon, if (active) GnixViews.red else GnixViews.muted), LinearLayout.LayoutParams(ui.dp(22), ui.dp(22)).apply { gravity = Gravity.CENTER_HORIZONTAL; bottomMargin = ui.dp(6) })
+            item.addView(ui.text(label, 11f, if (active) GnixViews.red else GnixViews.muted, active).apply { gravity = Gravity.CENTER }, LinearLayout.LayoutParams(-1, -2))
             ui.clickable(item, 14, GnixViews.background) {
                 if (destination == Page.SOURCES) { selected = store.loadSelection().toMutableSet(); topics = store.loadTopics().toMutableSet() }
                 category = "Tudo"; query = ""; searching = false; page = destination; render()
@@ -419,18 +464,19 @@ class MainActivity : Activity() {
         val revision = selectionRevision
         loading = true; notice = ""; render()
         worker.execute {
-            val result = NewsRepository(FeedClient()).refresh(snapshot, oldCache)
+            val result = NewsRepository(FeedClient(store)).refresh(snapshot, oldCache)
             runOnUiThread {
                 if (destroyed) return@runOnUiThread
                 loading = false
                 if (revision != selectionRevision) { if (page == Page.FEED || page == Page.SAVED) refresh(); return@runOnUiThread }
                 articles = result.articles
+                val successCount = snapshot.size - result.failedSourceIds.size
                 persist {
                     store.saveCache(articles)
-                    store.saveRefreshTime(DisplayPolicy.refreshTimestamp(System.currentTimeMillis(), result.failedSourceIds.isEmpty()))
+                    store.saveRefreshTime(DisplayPolicy.refreshTimestamp(System.currentTimeMillis(), successCount, snapshot.size))
                 }
                 notice = if (result.failedSourceIds.isEmpty()) "" else {
-                    val names = result.failedSourceIds.mapNotNull { id -> sources.find { it.id == id }?.name }.joinToString(", ")
+                    val names = result.failedSourceIds.mapNotNull { id -> sourceById[id]?.name }.joinToString(", ")
                     "Não foi possível atualizar: $names. Mantivemos as notícias já disponíveis dessas fontes."
                 }
                 if (page == Page.FEED || page == Page.SAVED) render()

@@ -14,10 +14,25 @@ import org.xml.sax.helpers.DefaultHandler;
 /** Parses publisher-provided RSS/Atom; no scripts, AI or remote XML entities. */
 public final class FeedParser {
     private static final int MAX_XML = 2 * 1024 * 1024;
+    private static final Pattern DOCTYPE = Pattern.compile("<!DOCTYPE", Pattern.CASE_INSENSITIVE);
+    private static final Pattern ENTITY_DECL = Pattern.compile("<!ENTITY", Pattern.CASE_INSENSITIVE);
+    private static final Pattern SCRIPT_STYLE = Pattern.compile("(?is)<(script|style)\\b[^>]*>.*?</\\1\\s*>");
+    private static final Pattern TAG = Pattern.compile("(?is)<[^>]*>");
+    private static final Pattern NUMERIC_ENTITY = Pattern.compile("&#(x[0-9a-fA-F]+|[0-9]+);");
+    private static final Pattern WHITESPACE = Pattern.compile("[\\s\\u00a0]+");
+    private static final Pattern CHARSET_HEADER = Pattern.compile("(?i)charset\\s*=\\s*[\"']?([a-z0-9_-]+)");
+    private static final Pattern XML_ENCODING = Pattern.compile("(?i)encoding\\s*=\\s*['\"]([^'\"]+)['\"]");
+    private static final Pattern HTML_LINK = Pattern.compile("(?is)<link\\b[^>]*>");
+    private static final Pattern HTML_ATTRIBUTE = Pattern.compile("([\\w:-]+)\\s*=\\s*(?:\"([^\"]*)\"|'([^']*)'|([^\\s>]+))", Pattern.CASE_INSENSITIVE);
+    private static final DateTimeFormatter RFC1123 = DateTimeFormatter.RFC_1123_DATE_TIME;
+    private static final DateTimeFormatter[] CUSTOM_DATES = {
+        DateTimeFormatter.ofPattern("EEE, d MMM yyyy HH:mm:ss Z", Locale.ENGLISH),
+        DateTimeFormatter.ofPattern("d MMM yyyy HH:mm:ss Z", Locale.ENGLISH)
+    };
+
     public static List<Article> parse(String xml, Source source) throws Exception {
         if (xml.length() > MAX_XML) throw new IllegalArgumentException("Feed muito grande");
-        String upper = xml.toUpperCase(Locale.ROOT);
-        if (upper.contains("<!DOCTYPE") || upper.contains("<!ENTITY"))
+        if (DOCTYPE.matcher(xml).find() || ENTITY_DECL.matcher(xml).find())
             throw new IllegalArgumentException("Declaração externa não permitida");
         DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
         factory.setNamespaceAware(true);
@@ -78,12 +93,31 @@ public final class FeedParser {
         } catch (Exception ignored) { }
         return "";
     }
+    public static String discoverFeedUrl(String html, String pageUrl) {
+        Matcher links = HTML_LINK.matcher(html);
+        while (links.find()) {
+            Map<String, String> attributes = new HashMap<>();
+            Matcher values = HTML_ATTRIBUTE.matcher(links.group());
+            while (values.find()) {
+                String value = first(values.group(2) == null ? "" : values.group(2),
+                    values.group(3) == null ? "" : values.group(3), values.group(4) == null ? "" : values.group(4));
+                attributes.put(values.group(1).toLowerCase(Locale.ROOT), value);
+            }
+            String rel = attributes.getOrDefault("rel", "").toLowerCase(Locale.ROOT);
+            String type = attributes.getOrDefault("type", "").toLowerCase(Locale.ROOT);
+            if (!Arrays.asList(rel.split("\\s+")).contains("alternate") ||
+                !(type.startsWith("application/rss+xml") || type.startsWith("application/atom+xml"))) continue;
+            String url = safeUrl(attributes.getOrDefault("href", "").replace("&amp;", "&"), pageUrl);
+            if (url.startsWith("https://")) return url;
+        }
+        return "";
+    }
     public static String plainText(String html) {
-        String text = html.replaceAll("(?is)<(script|style)\\b[^>]*>.*?</\\1\\s*>", " ")
-            .replaceAll("(?is)<[^>]*>", " ");
-        String[][] entities = {{"&nbsp;", " "}, {"&lt;", "<"}, {"&gt;", ">"}, {"&quot;", "\""}, {"&apos;", "'"}, {"&amp;", "&"}};
-        for (String[] pair : entities) text = text.replace(pair[0], pair[1]);
-        Matcher matcher = Pattern.compile("&#(x[0-9a-fA-F]+|[0-9]+);").matcher(text);
+        String text = SCRIPT_STYLE.matcher(html).replaceAll(" ");
+        text = TAG.matcher(text).replaceAll(" ");
+        text = text.replace("&nbsp;", " ").replace("&lt;", "<").replace("&gt;", ">")
+            .replace("&quot;", "\"").replace("&apos;", "'").replace("&amp;", "&");
+        Matcher matcher = NUMERIC_ENTITY.matcher(text);
         StringBuffer decoded = new StringBuffer();
         while (matcher.find()) {
             String replacement = " ";
@@ -95,17 +129,20 @@ public final class FeedParser {
             matcher.appendReplacement(decoded, Matcher.quoteReplacement(replacement));
         }
         matcher.appendTail(decoded);
-        return decoded.toString().replaceAll("[\\s\\u00a0]+", " ").trim();
+        return WHITESPACE.matcher(decoded.toString()).replaceAll(" ").trim();
     }
     private static long parseDate(String raw) {
+        if (raw == null || raw.isEmpty()) return 0;
         try { return Instant.parse(raw).toEpochMilli(); } catch (Exception ignored) { }
         try { return OffsetDateTime.parse(raw).toInstant().toEpochMilli(); } catch (Exception ignored) { }
-        try { return ZonedDateTime.parse(raw, DateTimeFormatter.RFC_1123_DATE_TIME).toInstant().toEpochMilli(); } catch (Exception ignored) { }
-        for (String format : new String[]{"EEE, d MMM yyyy HH:mm:ss Z", "d MMM yyyy HH:mm:ss Z"}) {
-            try { return ZonedDateTime.parse(raw, DateTimeFormatter.ofPattern(format, Locale.ENGLISH)).toInstant().toEpochMilli(); } catch (Exception ignored) { }
+        try { return ZonedDateTime.parse(raw, RFC1123).toInstant().toEpochMilli(); } catch (Exception ignored) { }
+        for (DateTimeFormatter format : CUSTOM_DATES) {
+            try { return ZonedDateTime.parse(raw, format).toInstant().toEpochMilli(); } catch (Exception ignored) { }
         }
         return 0;
     }
+    public static Matcher charsetMatcher(String contentType) { return CHARSET_HEADER.matcher(contentType == null ? "" : contentType); }
+    public static Matcher xmlEncodingMatcher(String probe) { return XML_ENCODING.matcher(probe); }
     public static List<Article> normalizeArticles(List<Article> articles) {
         List<Article> sorted = new ArrayList<>(articles);
         sorted.sort((a, b) -> Long.compare(b.publishedAt, a.publishedAt));

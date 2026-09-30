@@ -33,7 +33,7 @@ As categorias pertencem aos feeds escolhidos. O aplicativo não classifica autom
 
 ## Gerar o APK localmente
 
-No Linux, instale JDK 17+, Python 3, curl e unzip. Depois execute:
+No Linux, instale JDK 17+, curl e unzip. Depois execute:
 
 ```bash
 bash build-apk.sh

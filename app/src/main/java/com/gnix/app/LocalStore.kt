@@ -1,12 +1,12 @@
-package com.gnix.app
+package com.gnix.app;
 
-import android.content.Context
-import android.util.AtomicFile
-import org.json.JSONArray
-import org.json.JSONObject
-import java.io.File
+import android.content.Context;
+import android.util.AtomicFile;
+import org.json.JSONArray;
+import org.json.JSONObject;
+import java.io.File;
 
-class LocalStore(context: Context) {
+class LocalStore(context: Context) : FeedClient.MetaStore {
     private val root = context.filesDir
     private fun read(name: String): JSONArray = try {
         JSONArray(String(AtomicFile(File(root, name)).readFully(), Charsets.UTF_8))
@@ -43,7 +43,7 @@ class LocalStore(context: Context) {
         (0 until array.length()).mapNotNull { i ->
             val value = array.optJSONObject(i) ?: return@mapNotNull null
             val url = value.optString("url")
-            if (FeedParser.safeUrl(url, url).isEmpty()) return@mapNotNull null
+            if (url.isEmpty()) return@mapNotNull null
             Article(value.optString("title"), value.optString("summary"), url, value.optString("sourceId"), value.optLong("publishedAt"))
         }
     }
@@ -56,4 +56,38 @@ class LocalStore(context: Context) {
     fun saveRefreshTime(timestamp: Long) = write("refresh.json", JSONArray().put(timestamp))
     fun loadSaved(): List<Article> = readArticles("saved.json")
     fun saveBookmarks(articles: List<Article>) = writeArticles("saved.json", articles)
+
+    override fun etag(sourceId: String): String? = read("feed-meta.json").let { array ->
+        for (i in 0 until array.length()) {
+            val value = array.optJSONObject(i) ?: continue
+            if (value.optString("id") == sourceId) return value.optString("etag").ifEmpty { null }
+        }
+        null
+    }
+    override fun lastModified(sourceId: String): String? = read("feed-meta.json").let { array ->
+        for (i in 0 until array.length()) {
+            val value = array.optJSONObject(i) ?: continue
+            if (value.optString("id") == sourceId) return value.optString("lastModified").ifEmpty { null }
+        }
+        null
+    }
+    @Synchronized override fun save(sourceId: String, etag: String?, lastModified: String?) {
+        val array = read("feed-meta.json")
+        val next = JSONArray()
+        var replaced = false
+        for (i in 0 until array.length()) {
+            val value = array.optJSONObject(i) ?: continue
+            if (value.optString("id") != sourceId) next.put(value)
+            else {
+                replaced = true
+                if (etag != null || lastModified != null) {
+                    next.put(JSONObject().put("id", sourceId).put("etag", etag ?: "").put("lastModified", lastModified ?: ""))
+                }
+            }
+        }
+        if (!replaced && (etag != null || lastModified != null)) {
+            next.put(JSONObject().put("id", sourceId).put("etag", etag ?: "").put("lastModified", lastModified ?: ""))
+        }
+        write("feed-meta.json", next)
+    }
 }
