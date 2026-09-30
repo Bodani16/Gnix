@@ -24,6 +24,7 @@ public final class FeedParser {
     private static final Pattern XML_ENCODING = Pattern.compile("(?i)encoding\\s*=\\s*['\"]([^'\"]+)['\"]");
     private static final Pattern HTML_LINK = Pattern.compile("(?is)<link\\b[^>]*>");
     private static final Pattern HTML_ATTRIBUTE = Pattern.compile("([\\w:-]+)\\s*=\\s*(?:\"([^\"]*)\"|'([^']*)'|([^\\s>]+))", Pattern.CASE_INSENSITIVE);
+    private static final String[] SUFFIX_SEPARATORS = {" - ", " – ", " — ", " | "};
     private static final DateTimeFormatter RFC1123 = DateTimeFormatter.RFC_1123_DATE_TIME;
     private static final DateTimeFormatter[] CUSTOM_DATES = {
         DateTimeFormatter.ofPattern("EEE, d MMM yyyy HH:mm:ss Z", Locale.ENGLISH),
@@ -69,6 +70,8 @@ public final class FeedParser {
             }
             String url = safeUrl(rawLink, source.url);
             if (url.isEmpty() || title.isEmpty()) continue;
+            String publisher = field(item, "source");
+            title = stripPublisherSuffix(title, publisher.isEmpty() ? source.name : plainText(publisher));
             String summary = first(field(item, "description"), field(item, "summary"), field(item, "encoded"), field(item, "content"));
             String date = first(field(item, "pubDate"), field(item, "published"), field(item, "updated"), field(item, "date"));
             result.add(new Article(truncate(title, 500), truncate(plainText(summary), 3000), url, source.id, parseDate(date)));
@@ -80,6 +83,22 @@ public final class FeedParser {
         for (Node node = item.getFirstChild(); node != null; node = node.getNextSibling())
             if (node instanceof Element && local(node).equalsIgnoreCase(name)) return node.getTextContent().trim();
         return "";
+    }
+    /**
+     * Agregadores como o Google Notícias repetem o veículo no fim do título
+     * ("Manchete - Gazeta do Povo"). O nome já aparece ao lado da manchete na
+     * lista, então o sufixo só rouba espaço da própria manchete.
+     */
+    static String stripPublisherSuffix(String title, String publisher) {
+        if (publisher.isEmpty()) return title;
+        for (String separator : SUFFIX_SEPARATORS) {
+            String marker = separator + publisher;
+            if (title.length() > marker.length() && title.regionMatches(true, title.length() - marker.length(), marker, 0, marker.length())) {
+                String trimmed = title.substring(0, title.length() - marker.length()).trim();
+                if (!trimmed.isEmpty()) return trimmed;
+            }
+        }
+        return title;
     }
     private static String first(String... values) { for (String s : values) if (!s.isEmpty()) return s; return ""; }
     private static String truncate(String s, int limit) { return s.length() <= limit ? s : s.substring(0, limit); }

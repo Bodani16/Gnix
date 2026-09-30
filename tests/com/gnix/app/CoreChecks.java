@@ -33,6 +33,14 @@ public final class CoreChecks {
         boolean lowerEntity = false;
         try { FeedParser.parse("<!doctype rss [<!entity x 'y'>]><rss><channel/></rss>", src); } catch (Exception e) { lowerEntity = true; }
         check(lowerEntity, "Lowercase DOCTYPE should be rejected");
+        Source aggregator = new Source("gnews", "Gazeta do Povo", "https://news.google.com/rss/search?q=site:gazetadopovo.com.br", "Geral");
+        String gnews = "<rss><channel><item><title>Dino valida fake news - Gazeta do Povo</title><link>https://news.google.com/rss/articles/CBMiabc</link><source url=\"https://www.gazetadopovo.com.br\">Gazeta do Povo</source><pubDate>Mon, 28 Sep 2026 22:04:00 GMT</pubDate></item></channel></rss>";
+        check(FeedParser.parse(gnews, aggregator).get(0).title.equals("Dino valida fake news"), "Publisher suffix should leave the headline");
+        check(FeedParser.stripPublisherSuffix("Manchete — Gazeta do Povo", "Gazeta do Povo").equals("Manchete"), "Em dash suffix should be removed");
+        check(FeedParser.stripPublisherSuffix("Manchete | GAZETA DO POVO", "Gazeta do Povo").equals("Manchete"), "Suffix match should ignore case");
+        check(FeedParser.stripPublisherSuffix("Gazeta do Povo", "Gazeta do Povo").equals("Gazeta do Povo"), "Title that is only the publisher should survive");
+        check(FeedParser.stripPublisherSuffix("Bolsa cai - Gazeta", "Gazeta do Povo").equals("Bolsa cai - Gazeta"), "Unrelated suffix should stay");
+        check(FeedParser.stripPublisherSuffix(" - Gazeta do Povo", "Gazeta do Povo").equals(" - Gazeta do Povo"), "Empty headline should not be produced");
         String home = "<html><head><link href='/noticias.xml?x=1&amp;y=2' type='application/rss+xml' rel='alternate' title='Notícias'></head></html>";
         check(FeedParser.discoverFeedUrl(home, "https://example.com/").equals("https://example.com/noticias.xml?x=1&y=2"), "Site should reveal its RSS feed");
         check(FeedParser.discoverFeedUrl("<link rel=\"alternate\" type=\"application/atom+xml\" href=\"https://example.com/atom\">", "https://example.com/").equals("https://example.com/atom"), "Atom discovery should work");

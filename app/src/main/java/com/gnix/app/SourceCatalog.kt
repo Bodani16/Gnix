@@ -5,11 +5,16 @@ package com.gnix.app
  * Tecnoblog saiu do catálogo: passou a responder 403 a clientes não-navegador.
  * Reuters e AP não entram: a Reuters encerrou o RSS público (404) e a AP
  * bloqueia leitores automatizados (403), então nenhum endpoint é legível aqui.
+ * Gazeta do Povo não publica RSS: /feed, /rss e variantes respondem 200 com o
+ * HTML da home (catch-all da SPA) e /feed/atom/ devolve 403 do S3, então nem a
+ * autodescoberta encontra feed. Entra pelo Google Notícias filtrado por domínio,
+ * cujos links passam por um interstitial que só resolve com JavaScript.
  */
 object SourceCatalog {
     val initial = listOf(
         Source("g1", "G1", "https://g1.globo.com/rss/g1/", "Geral"),
         Source("agencia", "Agência Brasil", "https://agenciabrasil.ebc.com.br/rss/ultimasnoticias/feed.xml", "Geral"),
+        Source("gazetadopovo", "Gazeta do Povo", "https://news.google.com/rss/search?q=site:gazetadopovo.com.br&hl=pt-BR&gl=BR&ceid=BR:pt-419", "Geral"),
         Source("bbc", "BBC News Brasil", "https://feeds.bbci.co.uk/portuguese/rss.xml", "Mundo"),
         Source("g1-mundo", "G1 · Mundo", "https://g1.globo.com/rss/g1/mundo/", "Mundo"),
         Source("dw", "DW Brasil", "https://rss.dw.com/rdf/rss-br-all", "Mundo"),
