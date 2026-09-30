@@ -14,8 +14,12 @@ public final class NewsRepository {
     private final Loader loader;
     public NewsRepository(Loader loader) { this.loader = loader; }
     public RefreshResult refresh(List<Source> sources, List<Article> cache) {
+        if (sources.isEmpty()) return new RefreshResult(new ArrayList<>(), new ArrayList<>());
         List<Article> result = new ArrayList<>();
         List<String> failed = new ArrayList<>();
+        Map<String, List<Article>> cacheBySource = new HashMap<>();
+        for (Article article : cache)
+            cacheBySource.computeIfAbsent(article.sourceId, ignored -> new ArrayList<>()).add(article);
         ExecutorService pool = Executors.newFixedThreadPool(Math.max(1, Math.min(4, sources.size())));
         Map<Source, Future<List<Article>>> futures = new LinkedHashMap<>();
         try {
@@ -26,7 +30,7 @@ public final class NewsRepository {
                 catch (Exception e) {
                     entry.getValue().cancel(true);
                     failed.add(source.id);
-                    for (Article a : cache) if (a.sourceId.equals(source.id)) result.add(a);
+                    result.addAll(cacheBySource.getOrDefault(source.id, Collections.emptyList()));
                 }
             }
         } finally { pool.shutdownNow(); }

@@ -5,6 +5,8 @@ import android.app.AlertDialog
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.graphics.Typeface
 import android.view.Gravity
 import android.view.View
@@ -31,6 +33,7 @@ class MainActivity : Activity() {
     private var feedAdapter: ArticleAdapter? = null
     private val worker = Executors.newSingleThreadExecutor()
     private var sources = SourceCatalog.initial.toMutableList()
+    private var sourceById = emptyMap<String, Source>()
     private var custom = mutableListOf<Source>()
     private var selected = mutableSetOf<String>()
     private var topics = mutableSetOf<String>()
@@ -47,11 +50,14 @@ class MainActivity : Activity() {
     private var sourceCount: TextView? = null
     private var sourceContinue: TextView? = null
     private var destroyed = false
+    private val uiHandler = Handler(Looper.getMainLooper())
+    private var searchRunnable: Runnable? = null
 
     override fun onCreate(state: Bundle?) {
         super.onCreate(state)
         ui = GnixViews(this); store = LocalStore(this)
         custom = store.loadCustomSources().toMutableList(); sources.addAll(custom)
+        sourceById = sources.associateBy { it.id }
         selected = store.loadSelection().toMutableSet(); topics = store.loadTopics().toMutableSet()
         articles = store.loadCache(); saved = store.loadSaved(); configured = store.isConfigured()
         if (configured) page = Page.FEED
@@ -81,7 +87,12 @@ class MainActivity : Activity() {
         out.putStringArrayList("draftTopics", ArrayList(topics))
         super.onSaveInstanceState(out)
     }
-    override fun onDestroy() { destroyed = true; worker.shutdownNow(); super.onDestroy() }
+    override fun onDestroy() {
+        destroyed = true
+        searchRunnable?.let { uiHandler.removeCallbacks(it) }
+        worker.shutdownNow()
+        super.onDestroy()
+    }
     @Deprecated("Compatible back handling for Android 8.1+")
     override fun onBackPressed() { handleBack() }
     private fun handleBack() {
@@ -296,7 +307,7 @@ class MainActivity : Activity() {
                         if (result.isFailure) { url.error = "Não foi possível ler RSS/Atom deste endereço"; return@runOnUiThread }
                         val next = custom + source
                         if (persist { store.saveCustomSources(next) }) {
-                            custom = next.toMutableList(); sources.add(source); topics.add(source.category); selected.add(source.id)
+                            custom = next.toMutableList(); sources.add(source); sourceById = sources.associateBy { it.id }; topics.add(source.category); selected.add(source.id)
                             dialog.dismiss(); render()
                         }
                     }
@@ -324,13 +335,18 @@ class MainActivity : Activity() {
             ui.add(content, search, 18)
             search.addTextChangedListener(object : TextWatcher {
                 override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
-                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) { query = s.toString(); drawArticles() }
+                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                    query = s.toString()
+                    searchRunnable?.let { uiHandler.removeCallbacks(it) }
+                    searchRunnable = Runnable { if (!destroyed) drawArticles() }
+                    uiHandler.postDelayed(searchRunnable!!, 120)
+                }
                 override fun afterTextChanged(s: Editable?) {}
             })
         }
         val filters = ui.row()
         val items = if (isSaved) saved else articles
-        val cats = items.mapNotNull { article -> sources.find { it.id == article.sourceId }?.category }.distinct()
+        val cats = items.mapNotNull { article -> sourceById[article.sourceId]?.category }.distinct()
         for (cat in listOf("Tudo") + cats) filters.addView(ui.pill(cat, cat == category) { category = cat; render() }, LinearLayout.LayoutParams(-2, -2).apply { rightMargin = ui.dp(8) })
         ui.add(content, HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false; addView(filters) }, 18)
         if (loading) {
@@ -347,7 +363,7 @@ class MainActivity : Activity() {
         articleContainer = ui.column()
         ui.add(content, articleContainer!!)
         feedAdapter = ArticleAdapter(this, ui,
-            sourceFor = { id -> sources.find { it.id == id } },
+            sourceFor = { id -> sourceById[id] },
             isSaved = { url -> saved.any { it.url == url } },
             open = { openArticle(it) },
             toggleSaved = { article ->
@@ -369,9 +385,11 @@ class MainActivity : Activity() {
         list.removeAllViews()
         val isSaved = page == Page.SAVED
         val base = if (isSaved) saved else articles.filter { it.sourceId in selected }
+        val hasQuery = query.isNotBlank()
+        val queryLower = if (hasQuery) query.trim().lowercase(Locale.ROOT) else ""
         val filtered = base.filter { article ->
-            val src = sources.find { it.id == article.sourceId }
-            (category == "Tudo" || src?.category == category) && (query.isBlank() || "${article.title} ${article.summary} ${src?.name.orEmpty()}".contains(query, ignoreCase = true))
+            val src = sourceById[article.sourceId]
+            (category == "Tudo" || src?.category == category) && (!hasQuery || "${article.title} ${article.summary} ${src?.name.orEmpty()}".lowercase(Locale.ROOT).contains(queryLower))
         }
         feedAdapter?.submit(filtered)
         list.visibility = if (filtered.isEmpty()) View.VISIBLE else View.GONE
@@ -390,8 +408,14 @@ class MainActivity : Activity() {
         }
     }
     private fun openArticle(article: Article) {
-        if (FeedParser.safeUrl(article.url, article.url).isEmpty()) { toast("Link inválido"); return }
-        try { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(article.url))) }
+        val safe = FeedParser.safeUrl(article.url, article.url)
+        if (safe.isEmpty()) { toast("Link inválido"); return }
+        val uri = Uri.parse(safe)
+        if (!"https".equals(uri.scheme, ignoreCase = true) || uri.host.isNullOrBlank()) {
+            toast("Esta notícia não usa HTTPS seguro.")
+            return
+        }
+        try { startActivity(Intent(Intent.ACTION_VIEW, uri).addCategory(Intent.CATEGORY_BROWSABLE)) }
         catch (_: Exception) { toast("Nenhum navegador disponível para abrir esta notícia.") }
     }
     private fun bottomNav() {
@@ -430,7 +454,7 @@ class MainActivity : Activity() {
                     store.saveRefreshTime(DisplayPolicy.refreshTimestamp(System.currentTimeMillis(), result.failedSourceIds.isEmpty()))
                 }
                 notice = if (result.failedSourceIds.isEmpty()) "" else {
-                    val names = result.failedSourceIds.mapNotNull { id -> sources.find { it.id == id }?.name }.joinToString(", ")
+                    val names = result.failedSourceIds.mapNotNull { id -> sourceById[id]?.name }.joinToString(", ")
                     "Não foi possível atualizar: $names. Mantivemos as notícias já disponíveis dessas fontes."
                 }
                 if (page == Page.FEED || page == Page.SAVED) render()
