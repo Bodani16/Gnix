@@ -2,6 +2,10 @@
 
 App Android nativo de notícias com identidade vermelho e preto, inspirado nas referências visuais enviadas pelo usuário.
 
+Repositório: [Bodani16/Gnix](https://github.com/Bodani16/Gnix).
+
+O [Plano Mestre](PLANO_MESTRE.md) reúne a visão do produto, a estratégia de evolução e a organização do trabalho com IA. Os registros de verificação ficam em [docs/verification.md](docs/verification.md).
+
 ## Estado desta entrega
 
 **Código-fonte preparado; APK ainda não compilado.** A máquina de desenvolvimento tem Java 21, mas não possui SDK Android ou Gradle. Downloads falharam com conexão recusada ao proxy do sandbox; as solicitações de permissão de rede foram interrompidas. Não foi feita compilação de Kotlin, lint Android ou execução em emulador. Não há arquivo APK neste pacote e não se afirma que a compilação Android passou.
@@ -28,6 +32,8 @@ G1, Agência Brasil, BBC News Brasil, Tecnoblog, Canaltech e feeds temáticos do
 
 Requisitos: JDK 17+, Python 3, curl, unzip e acesso à Internet.
 
+O aplicativo não exige credenciais nem variáveis de um arquivo `.env`. O arquivo `.env` incluído no repositório documenta essa configuração e não é carregado pelos scripts de build. Para indicar um SDK Android já instalado, defina `ANDROID_HOME` no ambiente do terminal.
+
 ```bash
 bash build-apk.sh
 ```
@@ -44,7 +50,7 @@ Não há Gradle Wrapper JAR nesta entrega: ele também precisa ser obtido pela r
 
 ## Compilação automática opcional
 
-O arquivo `.github/workflows/android.yml` está preparado para gerar e disponibilizar o APK como artifact em um repositório GitHub. **O workflow não foi executado nem publicado.** Ele pode ser acionado em Actions após o projeto ser colocado em um repositório pelo usuário. Nenhuma mensagem, upload ou publicação externa foi feita nesta sessão.
+O arquivo `.github/workflows/android.yml` compila o projeto em pushes para `main` e também pode ser acionado manualmente em GitHub Actions. Quando a execução passa, disponibiliza o APK de verificação como artifact `Gnix-APK-verificacao`. Consulte a página [Actions](https://github.com/Bodani16/Gnix/actions) para conferir o resultado de cada execução. Esse APK usa uma chave de depuração efêmera do runner; para atualizações instaláveis no mesmo aparelho, use uma compilação local com a mesma chave preservada.
 
 ## Instalar o APK após compilar
 
