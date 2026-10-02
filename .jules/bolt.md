@@ -1,0 +1,3 @@
+## 2024-05-23 - Avoid String Interpolation in Loops for Search Filters
+**Learning:** In Android/Kotlin, using string interpolation (`"${a} ${b} ${c}".contains(...)`) inside tight loops like `filter` blocks (e.g., when searching articles in `MainActivity.kt`) creates unnecessary allocations (StringBuilder and new Strings) for every iteration, which degrades performance, especially since this operation blocks the main thread during UI updates.
+**Action:** Replace string interpolation with individual `contains()` checks combined with short-circuiting logical OR (`a.contains() || b.contains() || c.contains()`) to avoid allocation overhead and allow early returns when a match is found.
