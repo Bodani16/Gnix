@@ -16,7 +16,7 @@ public final class FeedParser {
     private static final int MAX_XML = 2 * 1024 * 1024;
     private static final Pattern DOCTYPE = Pattern.compile("<!DOCTYPE", Pattern.CASE_INSENSITIVE);
     private static final Pattern ENTITY_DECL = Pattern.compile("<!ENTITY", Pattern.CASE_INSENSITIVE);
-    private static final Pattern SCRIPT_STYLE = Pattern.compile("(?is)<(script|style)\\b[^>]*>.*?</\\1\\s*>");
+    private static final Pattern SCRIPT_STYLE = Pattern.compile("(?is)<(script|style)\\b[^>]*>.*?(?:</\\1\\s*>|$)");
     private static final Pattern TAG = Pattern.compile("(?is)<[^>]*>");
     private static final Pattern NUMERIC_ENTITY = Pattern.compile("&#(x[0-9a-fA-F]+|[0-9]+);");
     private static final Pattern WHITESPACE = Pattern.compile("[\\s\\u00a0]+");
@@ -38,7 +38,7 @@ public final class FeedParser {
         DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
         factory.setNamespaceAware(true);
         factory.setExpandEntityReferences(false);
-        try { factory.setFeature(javax.xml.XMLConstants.FEATURE_SECURE_PROCESSING, true); } catch (Exception ignored) { }
+        try { factory.setFeature("http://javax.xml.XMLConstants/feature/secure-processing", true); } catch (Exception ignored) { }
         try { factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true); } catch (Exception ignored) { }
         try { factory.setFeature("http://xml.org/sax/features/external-general-entities", false); } catch (Exception ignored) { }
         try { factory.setFeature("http://xml.org/sax/features/external-parameter-entities", false); } catch (Exception ignored) { }
