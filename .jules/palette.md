@@ -1,0 +1,3 @@
+## 2024-05-18 - Cohesive Article Card Click Targets
+**Learning:** In dynamically generated lists with multiple clickable text elements (headline, summary, read more link), TalkBack announces each element separately, creating excessive noise and forcing users to swipe multiple times to navigate past a single article. The touch targets were also fragmented, requiring precision taps.
+**Action:** Applied `ui.clickable()` and an aggregated `contentDescription` directly to the parent card container. This unifies the card into a single, optimally sized touch target and provides a clean, single-swipe screen reader experience.
