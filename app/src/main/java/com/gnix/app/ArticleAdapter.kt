@@ -27,31 +27,31 @@ class ArticleAdapter(
     override fun getItemId(position: Int): Long = position.toLong()
 
     private class Holder(
-        val outer: LinearLayout, val metadata: TextView, val sourceIcon: FrameLayout,
+        val outer: LinearLayout, val card: LinearLayout, val metadata: TextView, val sourceIcon: FrameLayout,
         val headline: TextView, val summary: TextView, val read: TextView, val bookmark: FrameLayout
     )
     private fun create(): Holder {
         val outer = ui.column().apply { setPadding(ui.dp(22), 0, ui.dp(22), ui.dp(14)) }
         val card = ui.card()
-        val metadataRow = ui.row()
+        val metadataRow = ui.row().apply { importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS }
         val sourceIcon = FrameLayout(context)
         metadataRow.addView(sourceIcon, LinearLayout.LayoutParams(ui.dp(15), ui.dp(15)).apply { rightMargin = ui.dp(8) })
         val metadata = ui.text("", 12f, GnixViews.muted).apply { maxLines = 2 }
         metadataRow.addView(metadata, LinearLayout.LayoutParams(0, -2, 1f))
         ui.add(card, metadataRow, 13)
-        val headline = ui.text("", 19f, bold = true).apply { isFocusable = true }
+        val headline = ui.text("", 19f, bold = true).apply { importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO }
         ui.add(card, headline, 10)
-        val summary = ui.text("", 15f, GnixViews.muted).apply { maxLines = 4; ellipsize = TextUtils.TruncateAt.END }
+        val summary = ui.text("", 15f, GnixViews.muted).apply { maxLines = 4; ellipsize = TextUtils.TruncateAt.END; importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO }
         ui.add(card, summary, 13)
         val actions = ui.row()
         val read = ui.text("Ler na fonte  ↗", 12f, GnixViews.red, true).apply {
-            minHeight = ui.dp(48); gravity = Gravity.CENTER_VERTICAL; isFocusable = true
+            minHeight = ui.dp(48); gravity = Gravity.CENTER_VERTICAL; importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
         }
         actions.addView(read, LinearLayout.LayoutParams(0, -2, 1f))
         val bookmark = FrameLayout(context).apply { isFocusable = true; minimumHeight = ui.dp(48); minimumWidth = ui.dp(48) }
         actions.addView(bookmark, LinearLayout.LayoutParams(ui.dp(48), ui.dp(48)))
         card.addView(actions); ui.add(outer, card)
-        return Holder(outer, metadata, sourceIcon, headline, summary, read, bookmark).also { outer.tag = it }
+        return Holder(outer, card, metadata, sourceIcon, headline, summary, read, bookmark).also { outer.tag = it }
     }
     private fun bindIcon(container: FrameLayout, kind: String, color: Int, size: Int, gravity: Int = Gravity.CENTER) {
         val existing = container.tag as? GnixIcon
@@ -76,12 +76,14 @@ class ArticleAdapter(
         }
         bindIcon(holder.sourceIcon, kind, GnixViews.muted, -1)
         holder.headline.text = article.title
-        holder.headline.setOnClickListener { open(article) }
         holder.summary.text = article.summary
         holder.summary.visibility = if (article.summary.isEmpty()) View.GONE else View.VISIBLE
-        holder.summary.setOnClickListener { open(article) }
-        holder.read.contentDescription = "Ler ${article.title} na fonte"
-        holder.read.setOnClickListener { open(article) }
+
+        ui.clickable(holder.card, 22, GnixViews.surface) { open(article) }
+        val timeLabel = relativeTime(article.publishedAt)
+        val srcName = source?.name ?: "Fonte"
+        holder.card.contentDescription = "$srcName, $timeLabel. ${article.title}. ${article.summary}. Toque para ler na fonte."
+
         val bookmarked = isSaved(article.url)
         holder.bookmark.contentDescription = if (bookmarked) "Remover dos salvos: ${article.title}" else "Salvar notícia: ${article.title}"
         bindIcon(holder.bookmark, "bookmark", if (bookmarked) GnixViews.red else GnixViews.foreground, ui.dp(23))
