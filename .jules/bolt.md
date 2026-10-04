@@ -1,0 +1,3 @@
+## 2023-10-24 - Avoid string interpolation inside UI loops
+**Learning:** In `MainActivity.kt`, a list `filter` loop was creating a composite string for every item using interpolation (`"${article.title} ${article.summary} ${src?.name.orEmpty()}"`) just to perform a substring match (`.contains()`). In a dynamic UI list filtering context, this creates thousands of short-lived strings on the UI thread, causing unnecessary memory allocations and triggering GC thrashing which can lead to dropped frames.
+**Action:** Replace string interpolation inside tight loops (like `filter` blocks) with individual `.contains()` checks combined with short-circuiting logical ORs (`||`). This avoids string object allocations altogether while achieving the same search result.
