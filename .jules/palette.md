@@ -1,0 +1,3 @@
+## 2024-10-05 - Optimize touch targets and screen reader focus in dynamic list items
+**Learning:** In dynamically built UI elements (like cards in lists), applying click listeners and distinct focus states to individual child views (headline, summary, etc.) creates fragmented TalkBack focus and suboptimal touch targets.
+**Action:** Apply `ui.clickable` and an aggregated `contentDescription` to the parent container (e.g., `card`) and set `importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO` on the individual child text views to ensure a cohesive TalkBack experience and optimal touch targets.
