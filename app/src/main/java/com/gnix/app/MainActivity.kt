@@ -413,10 +413,13 @@ class MainActivity : Activity() {
         val isSaved = page == Page.SAVED
         val base = if (isSaved) saved else articles.filter { it.sourceId in selected }
         val needle = query.trim()
+        // ⚡ Bolt: Use short-circuiting ORs instead of string interpolation to prevent memory allocation and GC thrashing in tight loops
         val filtered = if (needle.isEmpty() && category == "Tudo") base else base.filter { article ->
             val src = sourceById[article.sourceId]
             (category == "Tudo" || src?.category == category) &&
-                (needle.isEmpty() || "${article.title} ${article.summary} ${src?.name.orEmpty()}".contains(needle, ignoreCase = true))
+                (needle.isEmpty() || article.title.contains(needle, ignoreCase = true) ||
+                 article.summary.contains(needle, ignoreCase = true) ||
+                 src?.name?.contains(needle, ignoreCase = true) == true)
         }
         feedAdapter?.submit(filtered)
         list.visibility = if (filtered.isEmpty()) View.VISIBLE else View.GONE
