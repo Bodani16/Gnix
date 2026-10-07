@@ -1,0 +1,3 @@
+## 2026-10-07 - Avoid string interpolation in tight loops for text search
+**Learning:** In UI threads (like Android Main Thread), using string interpolation inside tight loops (like `filter` blocks) for string matching causes unnecessary memory allocations and GC thrashing.
+**Action:** Use individual `.contains()` checks combined with short-circuiting logical ORs to prevent unnecessary memory allocations and GC thrashing.
