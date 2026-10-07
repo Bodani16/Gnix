@@ -38,7 +38,9 @@ public final class FeedParser {
         DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
         factory.setNamespaceAware(true);
         factory.setExpandEntityReferences(false);
-        try { factory.setFeature(javax.xml.XMLConstants.FEATURE_SECURE_PROCESSING, true); } catch (Exception ignored) { }
+        // Use string literal instead of javax.xml.XMLConstants to prevent NoClassDefFoundError on older Android APIs
+        // which could bypass the exception catch blocks and silently disable XXE protection
+        try { factory.setFeature("http://javax.xml.XMLConstants/feature/secure-processing", true); } catch (Exception ignored) { }
         try { factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true); } catch (Exception ignored) { }
         try { factory.setFeature("http://xml.org/sax/features/external-general-entities", false); } catch (Exception ignored) { }
         try { factory.setFeature("http://xml.org/sax/features/external-parameter-entities", false); } catch (Exception ignored) { }
