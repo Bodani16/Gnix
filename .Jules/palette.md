@@ -1,0 +1,3 @@
+## 2024-05-18 - [Aggregated Touch Targets in Dynamic Android UI]
+**Learning:** When grouping dynamic UI elements for TalkBack in a view hierarchy with interactive children (like nested buttons), applying `contentDescription` directly to the parent swallows child focus and breaks accessibility. Instead, group non-interactive text elements into a dedicated wrapper layout, applying `contentDescription` and click listeners to the wrapper, while keeping other interactive elements as distinct siblings.
+**Action:** Use a dedicated `contentWrapper` (e.g., `ui.column().apply { isFocusable = true }`) for text groups and set `importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO` on child nodes, preserving the accessibility of sibling buttons.
