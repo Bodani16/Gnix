@@ -416,7 +416,11 @@ class MainActivity : Activity() {
         val filtered = if (needle.isEmpty() && category == "Tudo") base else base.filter { article ->
             val src = sourceById[article.sourceId]
             (category == "Tudo" || src?.category == category) &&
-                (needle.isEmpty() || "${article.title} ${article.summary} ${src?.name.orEmpty()}".contains(needle, ignoreCase = true))
+                // ⚡ Bolt Optimization: Replace string interpolation with individual short-circuiting
+                // contains() checks to prevent memory allocations and GC thrashing on the UI thread during search.
+                (needle.isEmpty() || article.title.contains(needle, ignoreCase = true) ||
+                 article.summary.contains(needle, ignoreCase = true) ||
+                 src?.name?.contains(needle, ignoreCase = true) == true)
         }
         feedAdapter?.submit(filtered)
         list.visibility = if (filtered.isEmpty()) View.VISIBLE else View.GONE
