@@ -1,0 +1,3 @@
+## 2024-10-10 - Screen Reader Focus Swallowing in Gnix
+**Learning:** In Android programmatic UI layouts, grouping dynamic UI elements for TalkBack by setting aggregated `contentDescription` or focus directly on a parent container swallows focus of any nested interactive child elements (like buttons).
+**Action:** Always encapsulate non-interactive text elements into a dedicated focusable wrapper (e.g. `ui.column().apply { isFocusable = true }`), set `View.IMPORTANT_FOR_ACCESSIBILITY_NO` on those children, and maintain the interactive elements as separate, accessible siblings outside the text wrapper.
