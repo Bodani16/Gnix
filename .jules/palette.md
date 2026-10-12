@@ -1,0 +1,3 @@
+## 2024-05-23 - Dynamic UI TalkBack Grouping
+**Learning:** In Gnix, applying an aggregated `contentDescription` directly to a parent container (like `card()`) that holds both non-interactive text and interactive elements (like buttons) swallows the focus for the interactive children, breaking their accessibility.
+**Action:** When grouping dynamic UI elements for TalkBack, encapsulate the non-interactive text elements into a dedicated wrapper (e.g., `ui.column().apply { isFocusable = true }`), set `View.IMPORTANT_FOR_ACCESSIBILITY_NO` on its children, and keep the interactive elements as separate, accessible siblings.

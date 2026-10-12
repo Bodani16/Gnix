@@ -27,22 +27,24 @@ class ArticleAdapter(
     override fun getItemId(position: Int): Long = position.toLong()
 
     private class Holder(
-        val outer: LinearLayout, val metadata: TextView, val sourceIcon: FrameLayout,
+        val outer: LinearLayout, val textWrapper: LinearLayout, val metadata: TextView, val sourceIcon: FrameLayout,
         val headline: TextView, val summary: TextView, val read: TextView, val bookmark: FrameLayout
     )
     private fun create(): Holder {
         val outer = ui.column().apply { setPadding(ui.dp(22), 0, ui.dp(22), ui.dp(14)) }
         val card = ui.card()
+        val textWrapper = ui.column().apply { isFocusable = true }
         val metadataRow = ui.row()
-        val sourceIcon = FrameLayout(context)
+        val sourceIcon = FrameLayout(context).apply { importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO }
         metadataRow.addView(sourceIcon, LinearLayout.LayoutParams(ui.dp(15), ui.dp(15)).apply { rightMargin = ui.dp(8) })
-        val metadata = ui.text("", 12f, GnixViews.muted).apply { maxLines = 2 }
+        val metadata = ui.text("", 12f, GnixViews.muted).apply { maxLines = 2; importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO }
         metadataRow.addView(metadata, LinearLayout.LayoutParams(0, -2, 1f))
-        ui.add(card, metadataRow, 13)
-        val headline = ui.text("", 19f, bold = true).apply { isFocusable = true }
-        ui.add(card, headline, 10)
-        val summary = ui.text("", 15f, GnixViews.muted).apply { maxLines = 4; ellipsize = TextUtils.TruncateAt.END }
-        ui.add(card, summary, 13)
+        ui.add(textWrapper, metadataRow, 13)
+        val headline = ui.text("", 19f, bold = true).apply { importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO }
+        ui.add(textWrapper, headline, 10)
+        val summary = ui.text("", 15f, GnixViews.muted).apply { maxLines = 4; ellipsize = TextUtils.TruncateAt.END; importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO }
+        ui.add(textWrapper, summary, 13)
+        card.addView(textWrapper)
         val actions = ui.row()
         val read = ui.text("Ler na fonte  ↗", 12f, GnixViews.red, true).apply {
             minHeight = ui.dp(48); gravity = Gravity.CENTER_VERTICAL; isFocusable = true
@@ -51,7 +53,7 @@ class ArticleAdapter(
         val bookmark = FrameLayout(context).apply { isFocusable = true; minimumHeight = ui.dp(48); minimumWidth = ui.dp(48) }
         actions.addView(bookmark, LinearLayout.LayoutParams(ui.dp(48), ui.dp(48)))
         card.addView(actions); ui.add(outer, card)
-        return Holder(outer, metadata, sourceIcon, headline, summary, read, bookmark).also { outer.tag = it }
+        return Holder(outer, textWrapper, metadata, sourceIcon, headline, summary, read, bookmark).also { outer.tag = it }
     }
     private fun bindIcon(container: FrameLayout, kind: String, color: Int, size: Int, gravity: Int = Gravity.CENTER) {
         val existing = container.tag as? GnixIcon
@@ -69,17 +71,19 @@ class ArticleAdapter(
         val holder = (convertView?.tag as? Holder) ?: create()
         val article = articles[position]
         val source = sourceFor(article.sourceId)
-        holder.metadata.text = "${source?.name ?: "Fonte"} · ${relativeTime(article.publishedAt)}"
+        val sourceName = source?.name ?: "Fonte"
+        val time = relativeTime(article.publishedAt)
+        holder.metadata.text = "$sourceName · $time"
         val kind = when (source?.category) {
             "Mundo" -> "world"; "Economia" -> "economy"; "Tecnologia" -> "tech"
             "Esportes" -> "sports"; "Saúde" -> "health"; else -> "news"
         }
         bindIcon(holder.sourceIcon, kind, GnixViews.muted, -1)
         holder.headline.text = article.title
-        holder.headline.setOnClickListener { open(article) }
         holder.summary.text = article.summary
         holder.summary.visibility = if (article.summary.isEmpty()) View.GONE else View.VISIBLE
-        holder.summary.setOnClickListener { open(article) }
+        holder.textWrapper.contentDescription = "$sourceName, $time. ${article.title}. ${if (article.summary.isNotEmpty()) article.summary else ""}"
+        holder.textWrapper.setOnClickListener { open(article) }
         holder.read.contentDescription = "Ler ${article.title} na fonte"
         holder.read.setOnClickListener { open(article) }
         val bookmarked = isSaved(article.url)
