@@ -415,8 +415,15 @@ class MainActivity : Activity() {
         val needle = query.trim()
         val filtered = if (needle.isEmpty() && category == "Tudo") base else base.filter { article ->
             val src = sourceById[article.sourceId]
-            (category == "Tudo" || src?.category == category) &&
-                (needle.isEmpty() || "${article.title} ${article.summary} ${src?.name.orEmpty()}".contains(needle, ignoreCase = true))
+            val matchesCategory = category == "Tudo" || src?.category == category
+            if (!matchesCategory) return@filter false
+            if (needle.isEmpty()) return@filter true
+
+            // ⚡ Bolt: Avoid string interpolation inside tight loops to prevent memory allocations and GC thrashing.
+            // Using individual .contains() checks with short-circuiting logical ORs.
+            article.title.contains(needle, ignoreCase = true) ||
+            article.summary.contains(needle, ignoreCase = true) ||
+            src?.name.orEmpty().contains(needle, ignoreCase = true)
         }
         feedAdapter?.submit(filtered)
         list.visibility = if (filtered.isEmpty()) View.VISIBLE else View.GONE
