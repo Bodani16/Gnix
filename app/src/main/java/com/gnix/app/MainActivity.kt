@@ -415,8 +415,11 @@ class MainActivity : Activity() {
         val needle = query.trim()
         val filtered = if (needle.isEmpty() && category == "Tudo") base else base.filter { article ->
             val src = sourceById[article.sourceId]
+            // ⚡ Bolt: Avoid string interpolation allocations in filter loops to prevent GC thrashing on UI thread
             (category == "Tudo" || src?.category == category) &&
-                (needle.isEmpty() || "${article.title} ${article.summary} ${src?.name.orEmpty()}".contains(needle, ignoreCase = true))
+                (needle.isEmpty() || article.title.contains(needle, ignoreCase = true) ||
+                 article.summary.contains(needle, ignoreCase = true) ||
+                 src?.name?.contains(needle, ignoreCase = true) == true)
         }
         feedAdapter?.submit(filtered)
         list.visibility = if (filtered.isEmpty()) View.VISIBLE else View.GONE
